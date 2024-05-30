@@ -21,7 +21,7 @@ public class BetterPeacefulCommand implements CommandExecutor {
                 player = (Player) sender;
             }
             if (player == null) {
-                sender.sendMessage(plugin.pluginName + "Command can only be used by a player!");
+                sender.sendMessage("Command can only be used by a player!");
                 return true;
             }
             // do stuff
