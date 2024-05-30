@@ -3,3 +3,4 @@ server/*
 !server/run.sh
 target/classes/me/eerovil/betterpeaceful/BetterPeaceful.class
 BuildTools.jar
+buildtools/
