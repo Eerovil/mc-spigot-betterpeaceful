@@ -5,14 +5,12 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Particle;
-import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Creature;
 // import org.bukkit.craftbukkit.v1_20_R4.entity.CraftLivingEntity;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
-import org.bukkit.entity.Fireball;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Monster;
 import org.bukkit.entity.Mob;
@@ -23,6 +21,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.destroystokyo.paper.entity.ai.Goal;
@@ -41,9 +41,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
-import java.util.logging.Logger;
 
 public class BetterPeaceful extends JavaPlugin implements Listener {
+
+    private class TeleportTarget {
+        public Location location;
+        public String name;
+
+        public TeleportTarget(Location location, String name) {
+            this.location = location;
+            this.name = name;
+        }
+    }
 
     private final Map<UUID, Long> interactCooldown = new HashMap<>();
     private final Map<UUID, Integer> teleportList = new HashMap<>();
@@ -52,20 +61,24 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
     @EventHandler
     public void onPlayerUse(org.bukkit.event.player.PlayerInteractEvent event) {
         // If compass is used
+        if (!event.getAction().isRightClick()) {
+            return;
+        }
         Player p = event.getPlayer();
         getLogger().info("Player used item: " + p.getInventory().getItemInMainHand().getType());
         if(p.getInventory() != null && p.getInventory().getItemInMainHand().getType() == Material.COMPASS) {
             // Tp to current teleportList index
             Integer index = teleportList.getOrDefault(p.getUniqueId(), 0);
-            Map<Integer, Location> list = getTeleportList(p);
+            Map<Integer, TeleportTarget> list = getTeleportList(p);
             if (index >= list.size()) {
                 index = 0;
             }
-            Location loc = list.get(index);
+            TeleportTarget target = list.get(index);
+            Location loc = target.location;
             loc.setPitch(p.getLocation().getPitch());
             loc.setYaw(p.getLocation().getYaw());
             p.teleport(loc);
-            getLogger().info("Teleporting player to " + loc);
+            p.sendMessage("Teleporting to " + target.name);
             // Increment index
             index++;
             if (index >= list.size()) {
@@ -75,16 +88,16 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
         }
     }
 
-    public Map<Integer, Location> getTeleportList(Player player) {
+    public Map<Integer, TeleportTarget> getTeleportList(Player player) {
         // Return a collection where 0 is home, 1 is player 1 location, 2 is player 2 location, etc.
         // Skip player that is given as arg
-        Map<Integer, Location> list = new HashMap<>();
+        Map<Integer, TeleportTarget> list = new HashMap<>();
 
         Location home = player.getRespawnLocation();
         if (home == null) {
             home = player.getWorld().getSpawnLocation();
         }
-        list.put(0, home);
+        list.put(0, new TeleportTarget(home, "Home"));
         Integer index = 1;
 
         // Loop all players
@@ -92,7 +105,7 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
             if (p == player) {
                 continue;
             }
-            list.put(index, p.getLocation());
+            list.put(index, new TeleportTarget(p.getLocation(), p.getName()));
             index++;
         }
 
@@ -101,7 +114,7 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
         //     if (entity instanceof Player) {
         //         continue;
         //     }
-        //     list.put(index, entity.getLocation());
+        //     list.put(index, new TeleportTarget(entity.getLocation(), entity.getName()));
         //     index++;
         // }
 
@@ -208,7 +221,6 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
     public void EntityTargetEvent(org.bukkit.event.entity.EntityTargetEvent event) {
         Entity entity = event.getEntity();
         if (entity instanceof Monster) {
-            getLogger().info("EntityTargetEvent: " + event.getEntity().getName() + " targetting " + event.getTarget());
             event.setCancelled(true);
             // Mob mob = (Mob) entity;
             // Disable mob ai for 1 seconds
@@ -223,8 +235,24 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
     }
 
     @EventHandler
-    public void onEntityDamage(EntityDamageByEntityEvent event) {
-        
+    public void onEntityDamage(EntityDamageEvent baseEvent) {
+        Collection<DamageCause> badCauses = List.of(DamageCause.FIRE, DamageCause.FIRE_TICK);
+        if (badCauses.contains(baseEvent.getCause())) {
+            // If the taget is a monster and it's daytime, we despawn it
+            if (baseEvent.getEntity() instanceof Monster) {
+                Monster monster = (Monster) baseEvent.getEntity();
+                if (monster.getWorld().getTime() < 12300 || monster.getWorld().getTime() > 23850) {
+                    monster.remove();
+                }
+            }
+            baseEvent.setCancelled(true);
+            return;
+        }
+        if (!(baseEvent instanceof EntityDamageByEntityEvent)) {
+            return;
+        }
+
+        EntityDamageByEntityEvent event = (EntityDamageByEntityEvent) baseEvent;
         Entity entity = event.getEntity();
         if (!(entity instanceof LivingEntity)){
             return;
@@ -276,19 +304,22 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
                 .build();
 
         Random random = new Random();
-        // print the table
-        Collection<ItemStack> loot = lootTable.populateLoot(random, lootContext);
-        for (ItemStack item : loot) {
-            player.sendMessage("You got " + item.getAmount() + " " + item.getType());
-            // Drop the item to the ground
-            livingEntity.getWorld().dropItemNaturally(livingEntity.getLocation(), item);
+        // Try 5 times to get loot
+        for (int i = 0; i < 5; i++) {
+            Collection<ItemStack> loot = lootTable.populateLoot(random, lootContext);
+            if (loot.size() > 0) {
+                for (ItemStack item : loot) {
+                    // Drop the item to the ground
+                    livingEntity.getWorld().dropItemNaturally(livingEntity.getLocation(), item);
+                }
+                break;
+            }
         }
         // If the entity was a sheep, drop wool according to its color
         if (livingEntity instanceof Sheep) {
             Colorable colorable = (Colorable) livingEntity;
             Material wool = Material.valueOf(colorable.getColor().name() + "_WOOL");
             ItemStack woolStack = new ItemStack(wool, 1);
-            player.sendMessage("You got " + woolStack.getAmount() + " " + woolStack.getType());
             livingEntity.getWorld().dropItemNaturally(livingEntity.getLocation(), woolStack);
         }
 
