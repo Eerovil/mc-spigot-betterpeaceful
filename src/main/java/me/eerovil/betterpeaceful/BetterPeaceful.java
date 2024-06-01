@@ -12,11 +12,13 @@ import org.bukkit.entity.Creature;
 // import org.bukkit.craftbukkit.v1_20_R4.entity.CraftLivingEntity;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Fireball;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Monster;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Sheep;
+import org.bukkit.entity.Shulker;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.CreatureSpawnEvent;
@@ -44,6 +46,67 @@ import java.util.logging.Logger;
 public class BetterPeaceful extends JavaPlugin implements Listener {
 
     private final Map<UUID, Long> interactCooldown = new HashMap<>();
+    private final Map<UUID, Integer> teleportList = new HashMap<>();
+
+    // Add handler when compass is used
+    @EventHandler
+    public void onPlayerUse(org.bukkit.event.player.PlayerInteractEvent event) {
+        // If compass is used
+        Player p = event.getPlayer();
+        getLogger().info("Player used item: " + p.getInventory().getItemInMainHand().getType());
+        if(p.getInventory() != null && p.getInventory().getItemInMainHand().getType() == Material.COMPASS) {
+            // Tp to current teleportList index
+            Integer index = teleportList.getOrDefault(p.getUniqueId(), 0);
+            Map<Integer, Location> list = getTeleportList(p);
+            if (index >= list.size()) {
+                index = 0;
+            }
+            Location loc = list.get(index);
+            loc.setPitch(p.getLocation().getPitch());
+            loc.setYaw(p.getLocation().getYaw());
+            p.teleport(loc);
+            getLogger().info("Teleporting player to " + loc);
+            // Increment index
+            index++;
+            if (index >= list.size()) {
+                index = 0;
+            }
+            teleportList.put(p.getUniqueId(), index);
+        }
+    }
+
+    public Map<Integer, Location> getTeleportList(Player player) {
+        // Return a collection where 0 is home, 1 is player 1 location, 2 is player 2 location, etc.
+        // Skip player that is given as arg
+        Map<Integer, Location> list = new HashMap<>();
+
+        Location home = player.getRespawnLocation();
+        if (home == null) {
+            home = player.getWorld().getSpawnLocation();
+        }
+        list.put(0, home);
+        Integer index = 1;
+
+        // Loop all players
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            if (p == player) {
+                continue;
+            }
+            list.put(index, p.getLocation());
+            index++;
+        }
+
+        // Loop all mobs
+        // for (Entity entity : player.getWorld().getEntities()) {
+        //     if (entity instanceof Player) {
+        //         continue;
+        //     }
+        //     list.put(index, entity.getLocation());
+        //     index++;
+        // }
+
+        return list;
+    }
 
     @Override
     public boolean onCommand(final CommandSender sender, Command cmd, String label, String[] args) {
@@ -100,7 +163,6 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
     @EventHandler
     public void onCreatureSpawn(CreatureSpawnEvent event) {
         EntityType entityType = event.getEntityType();
-        getLogger().info("Spawned " + entityType);
         Entity entity = event.getEntity();
 
         // If this is ender dragon, kill it after spawning
@@ -113,19 +175,16 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
     }
 
     public void makePassive(LivingEntity monster) {
+        Boolean isMonster = monster instanceof Monster;
+        isMonster = isMonster || monster instanceof Shulker;
+        if (!isMonster) {
+            return;
+        }
         getLogger().info("Making " + monster.getName() + " id " + monster.getUniqueId() + " passive");
         MobGoals goals = Bukkit.getMobGoals();
         Mob mob = (Mob) monster;
-        Collection<Goal<Mob>> monsterGoals = goals.getAllGoals(mob);
         mob.setSilent(true);
-
-        // If no goals found
-        // if (monsterGoals.isEmpty()) {
-        //     // getLogger().info("No goals found for " + monster.getName());
-        //     // disable ai
-        //     ((Mob) monster).setAI(false);
-        //     return;
-        // }
+        Collection<Goal<Mob>> monsterGoals = goals.getAllGoals(mob);
 
         monsterGoals.forEach(wrappedGoal -> {
             GoalKey<Mob> key = wrappedGoal.getKey();
@@ -213,7 +272,7 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
                 .lootedEntity(livingEntity)
                 .killer(player)
                 .lootingModifier(1)
-                .luck(10)
+                .luck(100)
                 .build();
 
         Random random = new Random();
