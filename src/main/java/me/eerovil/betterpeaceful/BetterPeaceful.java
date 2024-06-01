@@ -65,7 +65,6 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
             return;
         }
         Player p = event.getPlayer();
-        getLogger().info("Player used item: " + p.getInventory().getItemInMainHand().getType());
         if(p.getInventory() != null && p.getInventory().getItemInMainHand().getType() == Material.COMPASS) {
             // Tp to current teleportList index
             Integer index = teleportList.getOrDefault(p.getUniqueId(), 0);
@@ -193,7 +192,6 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
         if (!isMonster) {
             return;
         }
-        getLogger().info("Making " + monster.getName() + " id " + monster.getUniqueId() + " passive");
         MobGoals goals = Bukkit.getMobGoals();
         Mob mob = (Mob) monster;
         mob.setSilent(true);
