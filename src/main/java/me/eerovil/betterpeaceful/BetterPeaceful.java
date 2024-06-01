@@ -5,28 +5,30 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Particle;
-import org.bukkit.craftbukkit.v1_20_R3.entity.CraftLivingEntity;
-import org.bukkit.damage.DamageSource;
+import org.bukkit.World;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Creature;
 // import org.bukkit.craftbukkit.v1_20_R4.entity.CraftLivingEntity;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Monster;
+import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Sheep;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
-import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import net.minecraft.world.entity.EntityInsentient;
+import com.destroystokyo.paper.entity.ai.Goal;
+import com.destroystokyo.paper.entity.ai.GoalKey;
+import com.destroystokyo.paper.entity.ai.MobGoals;
 
 import org.bukkit.inventory.ItemStack;
-// import net.minecraft.world.entity.EntityInsentient;
-// import net.minecraft.world.entity.ai.goal.PathfinderGoalRandomStrollLand;
-// import net.minecraft.world.entity.ai.goal.PathfinderGoalSelector;
+
 import org.bukkit.loot.LootContext;
 import org.bukkit.loot.LootTable;
 import org.bukkit.material.Colorable;
@@ -37,10 +39,33 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
+import java.util.logging.Logger;
 
 public class BetterPeaceful extends JavaPlugin implements Listener {
 
     private final Map<UUID, Long> interactCooldown = new HashMap<>();
+
+    @Override
+    public boolean onCommand(final CommandSender sender, Command cmd, String label, String[] args) {
+        Player player = null;
+        if (sender instanceof Player) {
+            player = (Player) sender;
+        }
+        if (player == null) {
+            sender.sendMessage("Command can only be used by a player!");
+            return true;
+        }
+        sender.sendMessage(label + " command executed!");
+        // do stuff
+        // Despawn all entities
+        for (Entity entity : player.getWorld().getEntities()) {
+            if (entity instanceof Creature) {
+                sender.sendMessage("Despawning " + entity.getName());
+                entity.remove();
+            }
+        }
+        return true;
+    }
 
     @Override
     public void onEnable() {
@@ -49,39 +74,89 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
     }
 
     @Override
+    public void onLoad() {
+        getLogger().info("Better Peaceful Mod Loadeddd!");
+    }
+
+    @Override
     public void onDisable() {
         getLogger().info("Better Peaceful Mod Disabled!");
+    }
+
+    public void killEntityUsingDamage(LivingEntity entity) {
+        // Kill the entity using damage
+        getLogger().info("Killing " + entity.getName());
+        if (entity.isDead()) {
+            getLogger().info("Entity is already dead");
+            return;
+        }
+        entity.setHealth(0);
+        // Loop this until the entity is dead
+        if (!entity.isDead()) {
+            Bukkit.getScheduler().runTaskLater(this, () -> killEntityUsingDamage(entity), 10);
+        }
     }
 
     @EventHandler
     public void onCreatureSpawn(CreatureSpawnEvent event) {
         EntityType entityType = event.getEntityType();
+        getLogger().info("Spawned " + entityType);
         Entity entity = event.getEntity();
 
-        if (entity instanceof Monster) {
-            long mobCount = Bukkit.getWorlds().stream()
-                    .flatMap(world -> world.getEntitiesByClass(Monster.class).stream())
-                    .filter(monster -> monster.getType() == entityType)
-                    .count();
-
-            if (mobCount >= 1) {
-                event.setCancelled(true);
-                return;
-            }
-
-            // Change AI to passive
-            // makePassive((Monster) entity);
+        // If this is ender dragon, kill it after spawning
+        if (entityType == EntityType.ENDER_DRAGON) {
+            // Wait for 10 tick before killing the dragon
+            Bukkit.getScheduler().runTaskLater(this, () -> killEntityUsingDamage((LivingEntity) entity), 10);
         }
+
+        makePassive((LivingEntity) entity);
     }
 
-    // private void makePassive(Monster monster) {
-    //     EntityInsentient nmsEntity = (EntityInsentient) ((CraftLivingEntity) monster).getHandle();
-    //     nmsEntity.bP = new PathfinderGoalSelector(nmsEntity.D);
-    //     nmsEntity.bQ = new PathfinderGoalSelector(nmsEntity.D);
+    public void makePassive(LivingEntity monster) {
+        getLogger().info("Making " + monster.getName() + " id " + monster.getUniqueId() + " passive");
+        MobGoals goals = Bukkit.getMobGoals();
+        Mob mob = (Mob) monster;
+        Collection<Goal<Mob>> monsterGoals = goals.getAllGoals(mob);
+        mob.setSilent(true);
 
-    //     // Add a new "wander" goal
-    //     nmsEntity.bP.a(0, new PathfinderGoalRandomStrollLand(nmsEntity, 1.0));
-    // }
+        // If no goals found
+        // if (monsterGoals.isEmpty()) {
+        //     // getLogger().info("No goals found for " + monster.getName());
+        //     // disable ai
+        //     ((Mob) monster).setAI(false);
+        //     return;
+        // }
+
+        monsterGoals.forEach(wrappedGoal -> {
+            GoalKey<Mob> key = wrappedGoal.getKey();
+            // Only remove keys that have the string attack in key
+            List<String> badKeys = List.of("attack", "leap_at");
+            // Remove all creeper-specific goals
+            List<String> badClasses = List.of("creeper");
+
+            Boolean isBad = badClasses.stream().anyMatch(key.getNamespacedKey().getClass().toString()::contains);
+            isBad = isBad || badKeys.stream().anyMatch(key.getNamespacedKey().getKey()::contains);
+
+            if (isBad) {
+                goals.removeGoal(mob, key);
+            } else {
+                // getLogger().info("Keeping goal: " + key.getNamespacedKey().getKey());
+            }
+        });
+    }
+
+    @EventHandler
+    public void EntityTargetEvent(org.bukkit.event.entity.EntityTargetEvent event) {
+        Entity entity = event.getEntity();
+        if (entity instanceof Monster) {
+            getLogger().info("EntityTargetEvent: " + event.getEntity().getName() + " targetting " + event.getTarget());
+            event.setCancelled(true);
+            // Mob mob = (Mob) entity;
+            // Disable mob ai for 1 seconds
+            // mob.setAI(false);
+            // Bukkit.getScheduler().runTaskLater(this, () -> mob.setAI(true), 20);
+        }
+    }
 
     public static void showHearts(Entity entity) {
         Location location = entity.getLocation();
@@ -90,12 +165,13 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onEntityDamage(EntityDamageByEntityEvent event) {
-        // Remove all damage events
-        event.setCancelled(true);
         
         Entity entity = event.getEntity();
         if (!(entity instanceof LivingEntity)){
             return;
+        } else {
+            // Remove all damage events
+            event.setCancelled(true);
         }
 
         Entity damagingEntity = event.getDamager();
@@ -109,6 +185,9 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
         Player player = (Player) damagingEntity;
 
         LivingEntity livingEntity = (LivingEntity) entity;
+
+        makePassive(livingEntity);
+
         UUID entityId = livingEntity.getUniqueId();
         long currentTime = System.currentTimeMillis();
 
@@ -134,7 +213,7 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
                 .lootedEntity(livingEntity)
                 .killer(player)
                 .lootingModifier(1)
-                .luck(1)
+                .luck(10)
                 .build();
 
         Random random = new Random();
@@ -157,6 +236,8 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
         // Show hearts on the entity like when breeding
         showHearts(livingEntity);
 
+        // Look at player
+        ((Mob) livingEntity).lookAt(player);
 
         // Don't use livingEntity.getLootTable() because it's not available in 1.16
 
