@@ -55,6 +55,7 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
     }
 
     private final Map<UUID, Long> interactCooldown = new HashMap<>();
+    private final Map<UUID, Long> teleportCooldown = new HashMap<>();
     private final Map<UUID, Integer> teleportList = new HashMap<>();
 
     // Add handler when compass is used
@@ -66,6 +67,14 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
         }
         Player p = event.getPlayer();
         if(p.getInventory() != null && p.getInventory().getItemInMainHand().getType() == Material.COMPASS) {
+            // Check cooldown
+            if (teleportCooldown.containsKey(p.getUniqueId())) {
+                long lastTeleportTime = teleportCooldown.get(p.getUniqueId());
+                if (System.currentTimeMillis() - lastTeleportTime < 1000) {
+                    return;
+                }
+            }
+            teleportCooldown.put(p.getUniqueId(), System.currentTimeMillis());
             // Tp to current teleportList index
             Integer index = teleportList.getOrDefault(p.getUniqueId(), 0);
             Map<Integer, TeleportTarget> list = getTeleportList(p);
