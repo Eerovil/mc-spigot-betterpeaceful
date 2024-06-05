@@ -113,7 +113,30 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
             if (p == player) {
                 continue;
             }
-            list.put(index, new TeleportTarget(p.getLocation(), p.getName()));
+            Location playerLocation = p.getLocation();
+            // playerLocation.setX(200.5);
+            // playerLocation.setY(200.5);
+            // playerLocation.setZ(200.5);
+            // If player is in the air, reduce y until there is a block
+            Integer counter = 0;
+            while (playerLocation.getBlock().isEmpty()) {
+                playerLocation.setY(playerLocation.getY() - 1);
+                counter++;
+                if (counter > 500) {
+                    break;
+                }
+            }
+            // check the resulting block
+            if (playerLocation.getBlock().isEmpty()) {
+                continue;
+            }
+            // If the block is lava, skip
+            if (playerLocation.getBlock().getType() == Material.LAVA) {
+                continue;
+            }
+            // All good. Add 1 to y and store the location
+            playerLocation.setY(playerLocation.getY() + 1);
+            list.put(index, new TeleportTarget(playerLocation, p.getName()));
             index++;
         }
 
@@ -227,7 +250,7 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
     @EventHandler
     public void EntityTargetEvent(org.bukkit.event.entity.EntityTargetEvent event) {
         Entity entity = event.getEntity();
-        if (entity instanceof Monster) {
+        if (entity instanceof LivingEntity) {
             event.setCancelled(true);
             // Mob mob = (Mob) entity;
             // Disable mob ai for 1 seconds
