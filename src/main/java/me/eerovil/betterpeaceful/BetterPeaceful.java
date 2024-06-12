@@ -73,6 +73,10 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
                 if (System.currentTimeMillis() - lastTeleportTime < 1000) {
                     return;
                 }
+                if (System.currentTimeMillis() - lastTeleportTime > 10000) {
+                    // After 10 seconds, reset the teleportList index
+                    teleportList.put(p.getUniqueId(), 0);
+                }
             }
             teleportCooldown.put(p.getUniqueId(), System.currentTimeMillis());
             // Tp to current teleportList index
@@ -117,26 +121,55 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
             // playerLocation.setX(200.5);
             // playerLocation.setY(200.5);
             // playerLocation.setZ(200.5);
-            // If player is in the air, reduce y until there is a block
-            Integer counter = 0;
-            while (playerLocation.getBlock().isEmpty()) {
-                playerLocation.setY(playerLocation.getY() - 1);
-                counter++;
-                if (counter > 500) {
-                    break;
+            Collection<Location> availableLocations = List.of(
+                playerLocation.clone().add(1, 0, 0),
+                playerLocation.clone().add(1, 0, 1),
+                playerLocation.clone().add(0, 0, 1),
+                playerLocation.clone().add(-1, 0, 1),
+                playerLocation.clone().add(-1, 0, 0),
+                playerLocation.clone().add(-1, 0, -1),
+                playerLocation.clone().add(0, 0, -1),
+                playerLocation.clone().add(1, 0, -1),
+                playerLocation
+            );
+
+            // Loop all available locations until we find a good one
+            Location goodLocation = null;
+            for (Location loc : availableLocations) {
+                // If player is in the air, reduce y until there is a block
+                Integer counter = 0;
+                while (loc.getBlock().isEmpty()) {
+                    loc.setY(loc.getY() - 1);
+                    counter++;
+                    if (counter > 500) {
+                        break;
+                    }
                 }
+                if (loc.getBlock().isEmpty()) {
+                    continue;
+                }
+                // If the block is lava, skip
+                if (loc.getBlock().getType() == Material.LAVA) {
+                    continue;
+                }
+                // If the block above is not empty, skip
+                if (!loc.clone().add(0, 1, 0).getBlock().isEmpty()) {
+                    continue;
+                }
+                // also block above that
+                if (!loc.clone().add(0, 2, 0).getBlock().isEmpty()) {
+                    continue;
+                }
+                goodLocation = loc;
+                break;
             }
-            // check the resulting block
-            if (playerLocation.getBlock().isEmpty()) {
+            if (goodLocation == null) {
                 continue;
             }
-            // If the block is lava, skip
-            if (playerLocation.getBlock().getType() == Material.LAVA) {
-                continue;
-            }
+
             // All good. Add 1 to y and store the location
-            playerLocation.setY(playerLocation.getY() + 1);
-            list.put(index, new TeleportTarget(playerLocation, p.getName()));
+            goodLocation.setY(goodLocation.getY() + 1);
+            list.put(index, new TeleportTarget(goodLocation, p.getName()));
             index++;
         }
 
