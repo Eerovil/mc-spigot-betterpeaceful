@@ -65,6 +65,10 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
         if (!event.getAction().isRightClick()) {
             return;
         }
+        // If target is a chest or other interactable block, skip
+        if (event.getClickedBlock() != null && event.getClickedBlock().getType().isInteractable()) {
+            return;
+        }
         Player p = event.getPlayer();
         if(p.getInventory() != null && p.getInventory().getItemInMainHand().getType() == Material.COMPASS) {
             // Check cooldown
@@ -173,15 +177,6 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
             index++;
         }
 
-        // Loop all mobs
-        // for (Entity entity : player.getWorld().getEntities()) {
-        //     if (entity instanceof Player) {
-        //         continue;
-        //     }
-        //     list.put(index, new TeleportTarget(entity.getLocation(), entity.getName()));
-        //     index++;
-        // }
-
         return list;
     }
 
@@ -283,7 +278,8 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
     @EventHandler
     public void EntityTargetEvent(org.bukkit.event.entity.EntityTargetEvent event) {
         Entity entity = event.getEntity();
-        if (entity instanceof LivingEntity) {
+        Entity target = event.getTarget();
+        if (entity instanceof LivingEntity || target instanceof LivingEntity) {
             event.setCancelled(true);
             // Mob mob = (Mob) entity;
             // Disable mob ai for 1 seconds
@@ -299,8 +295,8 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onEntityDamage(EntityDamageEvent baseEvent) {
-        Collection<DamageCause> badCauses = List.of(DamageCause.FIRE, DamageCause.FIRE_TICK);
-        if (badCauses.contains(baseEvent.getCause())) {
+        Collection<DamageCause> badCauses = List.of(DamageCause.FIRE, DamageCause.FIRE_TICK, DamageCause.SUFFOCATION);
+        if (baseEvent.getCause() == DamageCause.FIRE_TICK) {
             // If the taget is a monster and it's daytime, we despawn it
             if (baseEvent.getEntity() instanceof Monster) {
                 Monster monster = (Monster) baseEvent.getEntity();
@@ -308,6 +304,8 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
                     monster.remove();
                 }
             }
+        }
+        if (badCauses.contains(baseEvent.getCause())) {
             baseEvent.setCancelled(true);
             return;
         }
@@ -362,7 +360,7 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
         LootContext lootContext = new LootContext.Builder(livingEntity.getLocation())
                 .lootedEntity(livingEntity)
                 .killer(player)
-                .lootingModifier(1)
+                .lootingModifier(2)
                 .luck(100)
                 .build();
 
