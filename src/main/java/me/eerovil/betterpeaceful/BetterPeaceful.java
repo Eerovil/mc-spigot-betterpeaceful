@@ -17,6 +17,7 @@ import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Sheep;
 import org.bukkit.entity.Shulker;
+import org.bukkit.entity.Warden;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.CreatureSpawnEvent;
@@ -70,19 +71,19 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
             return;
         }
         Player p = event.getPlayer();
-        if(p.getInventory() != null && p.getInventory().getItemInMainHand().getType() == Material.COMPASS) {
-            // Check cooldown
-            if (teleportCooldown.containsKey(p.getUniqueId())) {
-                long lastTeleportTime = teleportCooldown.get(p.getUniqueId());
-                if (System.currentTimeMillis() - lastTeleportTime < 1000) {
-                    return;
-                }
-                if (System.currentTimeMillis() - lastTeleportTime > 10000) {
-                    // After 10 seconds, reset the teleportList index
-                    teleportList.put(p.getUniqueId(), 0);
-                }
+        // Check cooldown
+        if (teleportCooldown.containsKey(p.getUniqueId())) {
+            long lastTeleportTime = teleportCooldown.get(p.getUniqueId());
+            if (System.currentTimeMillis() - lastTeleportTime < 1000) {
+                return;
             }
-            teleportCooldown.put(p.getUniqueId(), System.currentTimeMillis());
+            if (System.currentTimeMillis() - lastTeleportTime > 10000) {
+                // After 10 seconds, reset the teleportList index
+                teleportList.put(p.getUniqueId(), 0);
+            }
+        }
+        teleportCooldown.put(p.getUniqueId(), System.currentTimeMillis());
+        if(p.getInventory() != null && p.getInventory().getItemInMainHand().getType() == Material.COMPASS) {
             // Tp to current teleportList index
             Integer index = teleportList.getOrDefault(p.getUniqueId(), 0);
             Map<Integer, TeleportTarget> list = getTeleportList(p);
@@ -101,7 +102,27 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
                 index = 0;
             }
             teleportList.put(p.getUniqueId(), index);
+        } else if (p.getInventory() != null && p.getInventory().getItemInMainHand().getType() == Material.CLOCK) {
+            // If clock is used, toggle player between creative and survival
+            if (p.getGameMode() == org.bukkit.GameMode.CREATIVE) {
+                p.setGameMode(org.bukkit.GameMode.SURVIVAL);
+                p.sendMessage("Switched to survival mode");
+            } else {
+                p.setGameMode(org.bukkit.GameMode.CREATIVE);
+                p.sendMessage("Switched to creative mode");
+            }
         }
+    }
+
+    private boolean isSafeLocation(Location location) {
+        if (location.getBlock().isEmpty()) {
+            return true;
+        }
+        // Water is also ok
+        if (location.getBlock().getType() == Material.WATER) {
+            return true;
+        }
+        return false;
     }
 
     public Map<Integer, TeleportTarget> getTeleportList(Player player) {
@@ -157,11 +178,11 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
                     continue;
                 }
                 // If the block above is not empty, skip
-                if (!loc.clone().add(0, 1, 0).getBlock().isEmpty()) {
+                if (!isSafeLocation(loc.clone().add(0, 1, 0))) {
                     continue;
                 }
                 // also block above that
-                if (!loc.clone().add(0, 2, 0).getBlock().isEmpty()) {
+                if (!isSafeLocation(loc.clone().add(0, 2, 0))) {
                     continue;
                 }
                 goodLocation = loc;
@@ -248,7 +269,7 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
 
     public void makePassive(LivingEntity monster) {
         Boolean isMonster = monster instanceof Monster;
-        isMonster = isMonster || monster instanceof Shulker;
+        isMonster = isMonster || monster instanceof Shulker || monster instanceof Warden;
         if (!isMonster) {
             return;
         }
