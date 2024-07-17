@@ -414,5 +414,10 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
         // Don't use livingEntity.getLootTable() because it's not available in 1.16
 
         interactCooldown.put(entityId, currentTime);
+
+        // If player is holding a blaze rod, delete the entity
+        if (player.getInventory().getItemInMainHand().getType() == Material.BLAZE_ROD) {
+            livingEntity.remove();
+        }
     }
 }
