@@ -1,19 +1,27 @@
 package me.eerovil.betterpeaceful;
 
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.UUID;
+
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Particle;
+import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Creature;
-// import org.bukkit.craftbukkit.v1_20_R4.entity.CraftLivingEntity;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.LivingEntity;
-import org.bukkit.entity.Monster;
 import org.bukkit.entity.Mob;
+import org.bukkit.entity.Monster;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Sheep;
 import org.bukkit.entity.Shulker;
@@ -24,24 +32,15 @@ import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.loot.LootContext;
+import org.bukkit.loot.LootTable;
+import org.bukkit.material.Colorable;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.destroystokyo.paper.entity.ai.Goal;
 import com.destroystokyo.paper.entity.ai.GoalKey;
 import com.destroystokyo.paper.entity.ai.MobGoals;
-
-import org.bukkit.inventory.ItemStack;
-
-import org.bukkit.loot.LootContext;
-import org.bukkit.loot.LootTable;
-import org.bukkit.material.Colorable;
-
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.UUID;
 
 public class BetterPeaceful extends JavaPlugin implements Listener {
 
@@ -66,11 +65,26 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
         if (!event.getAction().isRightClick()) {
             return;
         }
+        Block block = event.getClickedBlock();
         // If target is a chest or other interactable block, skip
-        if (event.getClickedBlock() != null && event.getClickedBlock().getType().isInteractable()) {
+        if (block != null && block.getType().isInteractable()) {
+            getLogger().info("Interactable block clicked: " + block.getType());
             return;
         }
         Player p = event.getPlayer();
+
+        // If player is holding a blaze rod, delete the entity they are looking at
+        if (p.getInventory().getItemInMainHand().getType() == Material.BLAZE_ROD) {
+            Entity target = p.getTargetEntity(10);
+            if (target != null) {
+                target.remove();
+            }
+            if (block != null) {
+                BlockFace face = event.getBlockFace();
+                deletePossibleWater(block, face);
+            }
+        }
+
         // Check cooldown
         if (teleportCooldown.containsKey(p.getUniqueId())) {
             long lastTeleportTime = teleportCooldown.get(p.getUniqueId());
@@ -111,6 +125,17 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
                 p.setGameMode(org.bukkit.GameMode.CREATIVE);
                 p.sendMessage("Switched to creative mode");
             }
+        }
+    }
+
+    private void deletePossibleWater(Block block, BlockFace face) {
+        Location loc = block.getLocation();
+        // Find the block that is next to the block "block" when going towards face "face"
+        loc.add(face.getModX(), face.getModY(), face.getModZ());
+        Block targetBlock = loc.getBlock();
+        // If target block is water or lava, remove it
+        if (targetBlock.getType() == Material.WATER || targetBlock.getType() == Material.LAVA) {
+            targetBlock.setType(Material.AIR);
         }
     }
 
@@ -418,6 +443,18 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
         // If player is holding a blaze rod, delete the entity
         if (player.getInventory().getItemInMainHand().getType() == Material.BLAZE_ROD) {
             livingEntity.remove();
+        }
+    }
+
+    // Don't allow breaking blocks when holding a blaze rod
+    @EventHandler
+    public void onBlockBreak(org.bukkit.event.block.BlockBreakEvent event) {
+        Player player = event.getPlayer();
+        if (player.getInventory().getItemInMainHand().getType() == Material.BLAZE_ROD) {
+            event.setCancelled(true);
+            Block block = event.getBlock();
+            BlockFace face = BlockFace.UP;  // Default face: cannot get a face from event
+            deletePossibleWater(block, face);
         }
     }
 }
