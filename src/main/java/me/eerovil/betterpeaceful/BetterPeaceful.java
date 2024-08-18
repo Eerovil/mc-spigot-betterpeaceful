@@ -5,7 +5,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
+import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -19,6 +21,8 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Creature;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Frog;
+import org.bukkit.entity.Frog.Variant;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Monster;
@@ -68,7 +72,6 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
         Block block = event.getClickedBlock();
         // If target is a chest or other interactable block, skip
         if (block != null && block.getType().isInteractable()) {
-            getLogger().info("Interactable block clicked: " + block.getType());
             return;
         }
         Player p = event.getPlayer();
@@ -78,10 +81,14 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
             Entity target = p.getTargetEntity(10);
             if (target != null) {
                 target.remove();
-            }
-            if (block != null) {
-                BlockFace face = event.getBlockFace();
-                deletePossibleWater(block, face);
+            } else {
+                // Find nearest water or lava source block in line of sight and remove it
+                List<Block> blocks = p.getLineOfSight((Set<Material>)null, 10);
+                for (Block b : blocks) {
+                    if (b.getType() == Material.WATER || b.getType() == Material.LAVA) {
+                        b.setType(Material.AIR);
+                    }
+                }
             }
         }
 
@@ -283,11 +290,22 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
         EntityType entityType = event.getEntityType();
         Entity entity = event.getEntity();
 
-        // If this is ender dragon, kill it after spawning
-        if (entityType == EntityType.ENDER_DRAGON) {
-            // Wait for 10 tick before killing the dragon
-            Bukkit.getScheduler().runTaskLater(this, () -> killEntityUsingDamage((LivingEntity) entity), 10);
+        if (event.getSpawnReason() == CreatureSpawnEvent.SpawnReason.SPAWNER_EGG && entity instanceof Frog) {
+            // If the entity has variants, set a random variant
+            try {
+                Frog frog = (Frog) entity;
+                Variant newVariant = Frog.Variant.values()[new Random().nextInt(Frog.Variant.values().length)];
+                frog.setVariant(newVariant);
+            } catch (Exception e) {
+                getLogger().log(Level.INFO, "Failed to set variant for entity: {0}", entity.getName());
+            }
         }
+
+        // // If this is ender dragon, kill it after spawning
+        // if (entityType == EntityType.ENDER_DRAGON) {
+        //     // Wait for 10 tick before killing the dragon
+        //     Bukkit.getScheduler().runTaskLater(this, () -> killEntityUsingDamage((LivingEntity) entity), 10);
+        // }
 
         makePassive((LivingEntity) entity);
     }
