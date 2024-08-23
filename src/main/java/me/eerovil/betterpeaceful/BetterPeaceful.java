@@ -258,7 +258,29 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         Bukkit.getPluginManager().registerEvents(this, this);
-        getLogger().info("Better Peaceful Mod Enabled!");
+        // Create a timer that runs every 1 second
+        Bukkit.getScheduler().scheduleSyncRepeatingTask(this, () -> {
+            // Loop all entities in all worlds
+            for (org.bukkit.World world : Bukkit.getWorlds()) {
+                for (Entity entity : world.getEntities()) {
+                    if (entity instanceof LivingEntity) {
+                        LivingEntity livingEntity = (LivingEntity) entity;
+                        // If entity is an ender dragon or wither, cause damage to it
+                        if (livingEntity instanceof org.bukkit.entity.EnderDragon || livingEntity instanceof org.bukkit.entity.Wither) {
+                            if (livingEntity.getHealth() <= 10) {
+                                livingEntity.setHealth(0);
+                            } else if (livingEntity.getHealth() <= 100) {
+                                livingEntity.setHealth(livingEntity.getHealth() - 10);
+                            } else if (livingEntity.getHealth() <= 170) {
+                                livingEntity.setHealth(livingEntity.getHealth() - 5);
+                            } else {
+                                livingEntity.setHealth(livingEntity.getHealth() - 1);
+                            }
+                        }
+                    }
+                }
+            }
+        }, 0L, 20L);
     }
 
     @Override
@@ -287,7 +309,6 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onCreatureSpawn(CreatureSpawnEvent event) {
-        EntityType entityType = event.getEntityType();
         Entity entity = event.getEntity();
 
         if (event.getSpawnReason() == CreatureSpawnEvent.SpawnReason.SPAWNER_EGG && entity instanceof Frog) {
@@ -300,12 +321,6 @@ public class BetterPeaceful extends JavaPlugin implements Listener {
                 getLogger().log(Level.INFO, "Failed to set variant for entity: {0}", entity.getName());
             }
         }
-
-        // // If this is ender dragon, kill it after spawning
-        // if (entityType == EntityType.ENDER_DRAGON) {
-        //     // Wait for 10 tick before killing the dragon
-        //     Bukkit.getScheduler().runTaskLater(this, () -> killEntityUsingDamage((LivingEntity) entity), 10);
-        // }
 
         makePassive((LivingEntity) entity);
     }
